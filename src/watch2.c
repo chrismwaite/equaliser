@@ -1,7 +1,7 @@
 #include <pebble.h>
 
 static Window *s_main_window;
-static Layer *s_draw_layer, *s_date_layer;
+static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer;
 static TextLayer *s_day_label, *s_month_label, *s_battery_layer;
 static char s_day_buffer[9], s_month_buffer[12];
 
@@ -12,24 +12,27 @@ typedef struct {
 } Time;
 
 static Time s_last_time;
+bool bluetooth = true;
 
 static void time_update_proc(Layer *this_layer, GContext *ctx) {
   int posY = 115;
-  for (int y=0; y<=s_last_time.hours; y++) {
+  for (int y=0; y<=23; y++) {
     int posX = 0;
-    int minutes = 60;
-    if(y==s_last_time.hours) {
-      minutes = s_last_time.minutes;
-    }
-    for(int x=0; x<minutes; x++) {
+    for(int x=0; x<60; x++) {
       graphics_context_set_fill_color(ctx, GColorFromRGB(170,170,170));
       if(y==11) {
         graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
       }
+      if(y<s_last_time.hours) {
+        graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
+      }
+      else if(y==s_last_time.hours && x<=s_last_time.minutes) {
+        graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
+      }
       if(x==s_last_time.seconds) {
         graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+        graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
-      graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       posX += 2;
       if((x+1)%15==0) {
         if((x+1)==30) {
@@ -55,15 +58,26 @@ static void date_update_proc(Layer *layer, GContext *ctx) {
   text_layer_set_text(s_month_label, s_month_buffer);  
 }
 
+static void bluetooth_update_proc(Layer *layer, GContext *ctx) {
+  if(bluetooth == true) {
+    graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+    graphics_fill_circle(ctx, GPoint(2.5,2.5), 2.5);
+  }
+}
+
 static void handle_battery(BatteryChargeState charge_state) {
   static char battery_text[] = "100%";
 
   if (charge_state.is_charging) {
-    snprintf(battery_text, sizeof(battery_text), "charging");
+    snprintf(battery_text, sizeof(battery_text), "...");
   } else {
     snprintf(battery_text, sizeof(battery_text), "%d%%", charge_state.charge_percent);
   }
   text_layer_set_text(s_battery_layer, battery_text);
+}
+
+static void handle_bluetooth(bool connected) {
+  bluetooth = connected;
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
@@ -76,6 +90,7 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   }
 
   handle_battery(battery_state_service_peek());
+  handle_bluetooth(bluetooth_connection_service_peek());
 }
 
 static void main_window_load(Window *window) {
@@ -86,6 +101,10 @@ static void main_window_load(Window *window) {
   s_date_layer = layer_create(GRect(0, 0, 144, 168));
   layer_set_update_proc(s_date_layer, date_update_proc);
   layer_add_child(window_get_root_layer(window), s_date_layer);
+
+  s_bluetooth_layer = layer_create(GRect(134, 5, 5, 5));
+  layer_set_update_proc(s_bluetooth_layer, bluetooth_update_proc);
+  layer_add_child(window_get_root_layer(window), s_bluetooth_layer);
 
   s_day_label = text_layer_create(GRect(5, 147, 55, 20));
   text_layer_set_text(s_day_label, s_day_buffer);
@@ -117,6 +136,7 @@ static void main_window_load(Window *window) {
 static void main_window_unload(Window *window) {
   layer_destroy(s_draw_layer);
   layer_destroy(s_date_layer);
+  layer_destroy(s_bluetooth_layer);
 
   text_layer_destroy(s_day_label);
   text_layer_destroy(s_month_label);
@@ -137,11 +157,13 @@ static void init() {
 
   tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
   battery_state_service_subscribe(handle_battery);
+  bluetooth_connection_service_subscribe(handle_bluetooth);
 }
 
 static void deinit() {
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
+  bluetooth_connection_service_unsubscribe();
   window_destroy(s_main_window);
 }
 
