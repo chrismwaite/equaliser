@@ -78,19 +78,20 @@ static void handle_battery(BatteryChargeState charge_state) {
 
 static void handle_bluetooth(bool connected) {
   bluetooth = connected;
+  vibes_short_pulse();
 }
 
 static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   s_last_time.hours = tick_time->tm_hour;
   s_last_time.minutes = tick_time->tm_min;
   s_last_time.seconds = tick_time->tm_sec;
+  
+  handle_battery(battery_state_service_peek());
+  
   // Redraw
   if(s_draw_layer) {
     layer_mark_dirty(s_draw_layer);
   }
-
-  handle_battery(battery_state_service_peek());
-  handle_bluetooth(bluetooth_connection_service_peek());
 }
 
 static void main_window_load(Window *window) {
@@ -105,6 +106,7 @@ static void main_window_load(Window *window) {
   s_bluetooth_layer = layer_create(GRect(134, 5, 5, 5));
   layer_set_update_proc(s_bluetooth_layer, bluetooth_update_proc);
   layer_add_child(window_get_root_layer(window), s_bluetooth_layer);
+  handle_bluetooth(bluetooth_connection_service_peek());
 
   s_day_label = text_layer_create(GRect(5, 147, 55, 20));
   text_layer_set_text(s_day_label, s_day_buffer);
