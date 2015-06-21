@@ -3,7 +3,7 @@
   "shortName": "Equaliser",
   "longName": "Equaliser",
   "companyName": "Christopher Waite",
-  "versionLabel": "1.1",
+  "versionLabel": "1.2",
   "sdkVersion": "3",
   "targetPlatforms": ["basalt"],
   "watchapp": {

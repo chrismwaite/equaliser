@@ -19,7 +19,13 @@ static void time_update_proc(Layer *this_layer, GContext *ctx) {
   for (int y=0; y<=23; y++) {
     int posX = 0;
     for(int x=0; x<60; x++) {
-      graphics_context_set_fill_color(ctx, GColorFromRGB(170,170,170));
+      if((x<=1) && (y%2!=0)) {
+        graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+      }
+      else {
+        graphics_context_set_fill_color(ctx, GColorFromRGB(170,170,170));
+      }
+      
       if(y==11) {
         graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
       }
@@ -106,7 +112,7 @@ static void main_window_load(Window *window) {
   s_bluetooth_layer = layer_create(GRect(134, 5, 5, 5));
   layer_set_update_proc(s_bluetooth_layer, bluetooth_update_proc);
   layer_add_child(window_get_root_layer(window), s_bluetooth_layer);
-  handle_bluetooth(bluetooth_connection_service_peek());
+  //handle_bluetooth(bluetooth_connection_service_peek());
 
   s_day_label = text_layer_create(GRect(5, 147, 55, 20));
   text_layer_set_text(s_day_label, s_day_buffer);
