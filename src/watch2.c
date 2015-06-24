@@ -3,7 +3,7 @@
 static Window *s_main_window;
 static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer;
 static TextLayer *s_day_label, *s_month_label, *s_battery_layer;
-static char s_day_buffer[9], s_month_buffer[12];
+static char s_day_buffer[10], s_month_buffer[12];
 
 typedef struct {
   int hours;
@@ -32,7 +32,7 @@ static void time_update_proc(Layer *this_layer, GContext *ctx) {
       if(y<s_last_time.hours) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
-      else if(y==s_last_time.hours && x<=s_last_time.minutes) {
+      else if(y==s_last_time.hours && x<s_last_time.minutes) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
       if(x==s_last_time.seconds) {
@@ -114,7 +114,7 @@ static void main_window_load(Window *window) {
   layer_add_child(window_get_root_layer(window), s_bluetooth_layer);
   //handle_bluetooth(bluetooth_connection_service_peek());
 
-  s_day_label = text_layer_create(GRect(5, 147, 55, 20));
+  s_day_label = text_layer_create(GRect(5, 147, 65, 20));
   text_layer_set_text(s_day_label, s_day_buffer);
   text_layer_set_background_color(s_day_label, GColorBlack);
   text_layer_set_text_color(s_day_label, GColorWhite);
@@ -123,7 +123,7 @@ static void main_window_load(Window *window) {
 
   layer_add_child(s_date_layer, text_layer_get_layer(s_day_label));
 
-  s_month_label = text_layer_create(GRect(64, 147, 75, 20));
+  s_month_label = text_layer_create(GRect(74, 147, 65, 20));
   text_layer_set_text(s_month_label, s_month_buffer);
   text_layer_set_background_color(s_month_label, GColorBlack);
   text_layer_set_text_color(s_month_label, GColorFromRGB(255,69,0));
