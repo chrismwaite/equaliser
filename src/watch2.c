@@ -1,5 +1,7 @@
 #include <pebble.h>
 
+#define KEY_SECONDS 0x0
+
 static Window *s_main_window;
 static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer, *s_12hour_layer;
 static TextLayer *s_day_label, *s_month_label, *s_battery_layer, *s_12hour_label;
@@ -19,6 +21,7 @@ typedef struct {
 
 static Time s_last_time;
 bool bluetooth = true;
+bool second_hand = true;
 
 //draw call for 12 hour time
 static void time_update_proc(Layer *this_layer, GContext *ctx) {
@@ -53,9 +56,11 @@ static void time_update_proc(Layer *this_layer, GContext *ctx) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
       }
       //second hand
-      if(x==s_last_time.seconds && y<end) {
-        graphics_context_set_fill_color(ctx, highlight_colour);
-        graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
+      if(second_hand == true) {
+        if(x==s_last_time.seconds && y<end) {
+          graphics_context_set_fill_color(ctx, highlight_colour);
+          graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
+        }
       }
       posX += 2;
       if((x+1)%15==0) {
@@ -96,9 +101,11 @@ static void time_update_proc_24(Layer *this_layer, GContext *ctx) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
       //second hand
-      if(x==s_last_time.seconds) {
-        graphics_context_set_fill_color(ctx, highlight_colour);
-        graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
+      if(second_hand == true) {
+        if(x==s_last_time.seconds) {
+          graphics_context_set_fill_color(ctx, highlight_colour);
+          graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
+        }
       }
       posX += 2;
       if((x+1)%15==0) {
@@ -167,6 +174,33 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   // Redraw
   if(s_draw_layer) {
     layer_mark_dirty(s_draw_layer);
+  }
+}
+
+static void inbox_received_callback(DictionaryIterator *iterator, void *context) {
+  Tuple *t = dict_read_first(iterator);
+  while(t != NULL) {
+    switch(t->key) {
+    case KEY_SECONDS:
+      //APP_LOG(APP_LOG_LEVEL_ERROR, "value: %d", (int)t->value->int32);
+      if((int)t->value->int32 == 1)
+      {
+        tick_timer_service_unsubscribe();
+        tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+        second_hand = true;
+      }
+      else if((int)t->value->int32 == 0)
+      {
+        tick_timer_service_unsubscribe();
+        tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+        second_hand = false;
+      }
+      break;
+    default:
+      //APP_LOG(APP_LOG_LEVEL_ERROR, "Key %d not recognized!", (int)t->key);
+      break;
+    }
+    t = dict_read_next(iterator);
   }
 }
 
@@ -270,6 +304,9 @@ static void init() {
   window_set_background_color(s_main_window, GColorBlack);
 
   window_stack_push(s_main_window, true);
+
+  app_message_register_inbox_received(inbox_received_callback);
+  app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
   tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
   battery_state_service_subscribe(handle_battery);
