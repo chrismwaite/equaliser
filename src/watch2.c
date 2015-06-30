@@ -1,9 +1,15 @@
 #include <pebble.h>
 
 static Window *s_main_window;
-static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer;
-static TextLayer *s_day_label, *s_month_label, *s_battery_layer;
+static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer, *s_12hour_layer;
+static TextLayer *s_day_label, *s_month_label, *s_battery_layer, *s_12hour_label;
 static char s_day_buffer[10], s_month_buffer[12];
+
+static GColor primary_colour;
+static GColor highlight_colour;
+static GColor midday_highlight_colour;
+static GColor text_primary_colour;
+static GColor text_secondary_colour;
 
 typedef struct {
   int hours;
@@ -14,29 +20,84 @@ typedef struct {
 static Time s_last_time;
 bool bluetooth = true;
 
+//draw call for 12 hour time
 static void time_update_proc(Layer *this_layer, GContext *ctx) {
+  int posY = 111;
+  int start = 0;
+  int end = 12;
+
+  if(s_last_time.hours >= 12) {
+    start = 12;
+    end = 24;
+  }
+
+  for (int y=start; y<=end; y++) {
+    int posX = 0;
+    for(int x=0; x<60; x++) {
+      if((x<=1) && (y%2!=0)) {
+        graphics_context_set_fill_color(ctx, highlight_colour);
+      }
+      else {
+        graphics_context_set_fill_color(ctx, primary_colour);
+      }
+
+      //midday
+      if(y==(end-1)) {
+        graphics_context_set_fill_color(ctx, midday_highlight_colour);
+      }
+      
+      if(y<s_last_time.hours) {
+        graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
+      }
+      else if(y==s_last_time.hours && x<s_last_time.minutes) {
+        graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
+      }
+      //second hand
+      if(x==s_last_time.seconds && y<end) {
+        graphics_context_set_fill_color(ctx, highlight_colour);
+        graphics_fill_rect(ctx, GRect(posX,posY,2,8), 0, GCornerNone);
+      }
+      posX += 2;
+      if((x+1)%15==0) {
+        if((x+1)==30) {
+          posX += 2;
+        }
+        else {
+          posX += 1;
+        }
+      }
+    }
+    posY -= 9;
+  }
+}
+
+//draw call for 24 hour time
+static void time_update_proc_24(Layer *this_layer, GContext *ctx) {
   int posY = 115;
   for (int y=0; y<=23; y++) {
     int posX = 0;
     for(int x=0; x<60; x++) {
       if((x<=1) && (y%2!=0)) {
-        graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+        graphics_context_set_fill_color(ctx, highlight_colour);
       }
       else {
-        graphics_context_set_fill_color(ctx, GColorFromRGB(170,170,170));
+        graphics_context_set_fill_color(ctx, primary_colour);
+      }
+
+      //midday
+      if(y==11) {
+        graphics_context_set_fill_color(ctx, midday_highlight_colour);
       }
       
-      if(y==11) {
-        graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
-      }
       if(y<s_last_time.hours) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
       else if(y==s_last_time.hours && x<s_last_time.minutes) {
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
+      //second hand
       if(x==s_last_time.seconds) {
-        graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+        graphics_context_set_fill_color(ctx, highlight_colour);
         graphics_fill_rect(ctx, GRect(posX,posY,2,4), 0, GCornerNone);
       }
       posX += 2;
@@ -53,6 +114,15 @@ static void time_update_proc(Layer *this_layer, GContext *ctx) {
   }
 }
 
+static void twelve_hour_update_proc(Layer *layer, GContext *ctx) {
+  if(s_last_time.hours >= 12) {
+    text_layer_set_text(s_12hour_label, "PM");
+  }
+  else {
+    text_layer_set_text(s_12hour_label, "AM");
+  }
+}
+
 static void date_update_proc(Layer *layer, GContext *ctx) {
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
@@ -66,7 +136,7 @@ static void date_update_proc(Layer *layer, GContext *ctx) {
 
 static void bluetooth_update_proc(Layer *layer, GContext *ctx) {
   if(bluetooth == true) {
-    graphics_context_set_fill_color(ctx, GColorFromRGB(255,69,0));
+    graphics_context_set_fill_color(ctx, text_secondary_colour);
     graphics_fill_circle(ctx, GPoint(2.5,2.5), 2.5);
   }
 }
@@ -91,7 +161,7 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
   s_last_time.hours = tick_time->tm_hour;
   s_last_time.minutes = tick_time->tm_min;
   s_last_time.seconds = tick_time->tm_sec;
-  
+
   handle_battery(battery_state_service_peek());
   
   // Redraw
@@ -102,7 +172,12 @@ static void tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 
 static void main_window_load(Window *window) {
   s_draw_layer = layer_create(GRect(10, 24, 124, 119));
-  layer_set_update_proc(s_draw_layer, time_update_proc);
+  if(clock_is_24h_style()) {
+    layer_set_update_proc(s_draw_layer, time_update_proc_24);
+  }
+  else {
+    layer_set_update_proc(s_draw_layer, time_update_proc);
+  }
   layer_add_child(window_get_root_layer(window), s_draw_layer);
 
   s_date_layer = layer_create(GRect(0, 0, 144, 168));
@@ -112,12 +187,17 @@ static void main_window_load(Window *window) {
   s_bluetooth_layer = layer_create(GRect(134, 5, 5, 5));
   layer_set_update_proc(s_bluetooth_layer, bluetooth_update_proc);
   layer_add_child(window_get_root_layer(window), s_bluetooth_layer);
-  //handle_bluetooth(bluetooth_connection_service_peek());
+
+  if(!clock_is_24h_style()) {
+    s_12hour_layer = layer_create(GRect(0, 14, 144, 14));
+    layer_set_update_proc(s_12hour_layer, twelve_hour_update_proc);
+    layer_add_child(window_get_root_layer(window), s_12hour_layer);
+  }
 
   s_day_label = text_layer_create(GRect(5, 147, 65, 20));
   text_layer_set_text(s_day_label, s_day_buffer);
   text_layer_set_background_color(s_day_label, GColorBlack);
-  text_layer_set_text_color(s_day_label, GColorWhite);
+  text_layer_set_text_color(s_day_label, text_primary_colour);
   text_layer_set_font(s_day_label, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_day_label, GTextAlignmentLeft);
 
@@ -126,32 +206,60 @@ static void main_window_load(Window *window) {
   s_month_label = text_layer_create(GRect(74, 147, 65, 20));
   text_layer_set_text(s_month_label, s_month_buffer);
   text_layer_set_background_color(s_month_label, GColorBlack);
-  text_layer_set_text_color(s_month_label, GColorFromRGB(255,69,0));
+  text_layer_set_text_color(s_month_label, text_secondary_colour);
   text_layer_set_font(s_month_label, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_month_label, GTextAlignmentRight);
 
   layer_add_child(s_date_layer, text_layer_get_layer(s_month_label));
 
   s_battery_layer = text_layer_create(GRect(5, 0, 100, 14));
-  text_layer_set_text_color(s_battery_layer, GColorWhite);
+  text_layer_set_text_color(s_battery_layer, text_primary_colour);
   text_layer_set_background_color(s_battery_layer, GColorBlack);
   text_layer_set_font(s_battery_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_battery_layer, GTextAlignmentLeft);
   text_layer_set_text(s_battery_layer, "100%");
   layer_add_child(window_get_root_layer(window), text_layer_get_layer(s_battery_layer));
+
+  if(!clock_is_24h_style()) {
+    s_12hour_label = text_layer_create(GRect(0, 0, 144, 14));
+    text_layer_set_text_color(s_12hour_label, text_secondary_colour);
+    text_layer_set_background_color(s_12hour_label, GColorBlack);
+    text_layer_set_font(s_12hour_label, fonts_get_system_font(FONT_KEY_GOTHIC_14));
+    text_layer_set_text_alignment(s_12hour_label, GTextAlignmentCenter);
+    text_layer_set_text(s_12hour_label, "AM");
+    layer_add_child(s_12hour_layer, text_layer_get_layer(s_12hour_label));
+  }
 }
 
 static void main_window_unload(Window *window) {
   layer_destroy(s_draw_layer);
   layer_destroy(s_date_layer);
   layer_destroy(s_bluetooth_layer);
+  layer_destroy(s_12hour_layer);
 
   text_layer_destroy(s_day_label);
   text_layer_destroy(s_month_label);
   text_layer_destroy(s_battery_layer);
+  text_layer_destroy(s_12hour_label);
 }
 
 static void init() {
+  //Pebble colour setup
+  #ifdef PBL_COLOR
+    primary_colour = GColorFromRGB(170,170,170);
+    highlight_colour = GColorFromRGB(255,69,0);
+    text_primary_colour = GColorWhite;
+    text_secondary_colour = GColorFromRGB(255,69,0);
+    midday_highlight_colour = GColorFromRGB(255,69,0);
+  //Original Pebble setup
+  #else
+    primary_colour = GColorWhite;
+    highlight_colour = GColorBlack;
+    text_primary_colour = GColorWhite;
+    text_secondary_colour = GColorWhite;
+    midday_highlight_colour = GColorWhite;
+  #endif
+
   s_main_window = window_create();
 
   window_set_window_handlers(s_main_window, (WindowHandlers) {
