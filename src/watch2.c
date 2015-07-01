@@ -1,6 +1,7 @@
 #include <pebble.h>
 
 #define KEY_SECONDS 0x0
+#define SECOND_HAND_KEY true
 
 static Window *s_main_window;
 static Layer *s_draw_layer, *s_date_layer, *s_bluetooth_layer, *s_12hour_layer;
@@ -188,12 +189,16 @@ static void inbox_received_callback(DictionaryIterator *iterator, void *context)
         tick_timer_service_unsubscribe();
         tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
         second_hand = true;
+        //persist data
+        persist_write_bool(SECOND_HAND_KEY, second_hand);
       }
       else if((int)t->value->int32 == 0)
       {
         tick_timer_service_unsubscribe();
         tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
         second_hand = false;
+        //persist data
+        persist_write_bool(SECOND_HAND_KEY, second_hand);
       }
       break;
     default:
@@ -308,7 +313,18 @@ static void init() {
   app_message_register_inbox_received(inbox_received_callback);
   app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
-  tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+  //retrieve persisted data
+  if(persist_exists(SECOND_HAND_KEY)) {
+    second_hand = persist_read_bool(SECOND_HAND_KEY);
+  }
+
+  if(second_hand == true) {
+    tick_timer_service_subscribe(SECOND_UNIT, tick_handler);
+  }
+  else {
+    tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  }
+  
   battery_state_service_subscribe(handle_battery);
   bluetooth_connection_service_subscribe(handle_bluetooth);
 }
